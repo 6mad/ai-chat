@@ -1,0 +1,19 @@
+name: Purge jsDelivr Cache
+
+# 当 messages.json 被 push 到 main 分支时自动触发
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'messages.json'
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Purge jsDelivr CDN
+        run: |
+          echo "正在刷新 jsDelivr 缓存..."
+          resp=$(curl -s "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/messages.json")
+          echo "返回: $resp"
+          echo "$resp" | grep -q '"status": "finished"' && echo "✅ 缓存已刷新" || { echo "❌ 刷新失败"; exit 1; }
