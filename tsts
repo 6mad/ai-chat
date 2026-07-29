@@ -1,0 +1,69 @@
+#!/data/data/com.termux/files/usr/bin/bash
+#
+# tsts - 快捷消息工具：添加消息到 messages.json 并自动推送到远端
+# 用法: tsts <消息内容> [作者名]
+#       作者默认为"疯疯"，时间自动使用系统日期
+
+set -e
+
+PROJECT_DIR="/data/data/com.termux/files/home/hello"
+MESSAGES_FILE="$PROJECT_DIR/messages.json"
+
+if [ $# -lt 1 ]; then
+    echo "用法: tsts <消息内容> [作者名]"
+    echo "  消息内容  - 必填，要添加的消息"
+    echo "  作者名    - 可选，默认为 疯疯"
+    exit 1
+fi
+
+MESSAGE="$1"
+AUTHOR="${2:-疯疯}"
+DATE=$(date +%Y-%m-%d)
+
+# 通过环境变量传参给 Python，避免引号转义问题
+export PY_MESSAGE="$MESSAGE"
+export PY_AUTHOR="$AUTHOR"
+export PY_DATE="$DATE"
+export PY_FILE="$MESSAGES_FILE"
+
+python3 << 'PYEOF'
+import json, os
+
+filepath = os.environ['PY_FILE']
+message  = os.environ['PY_MESSAGE']
+author   = os.environ['PY_AUTHOR']
+date     = os.environ['PY_DATE']
+
+with open(filepath, 'r', encoding='utf-8') as f:
+    data = json.load(f)
+
+# 计算新 ID（当前最大 ID + 1）
+max_id = max((m['id'] for m in data['messages']), default=0)
+new_id = max_id + 1
+
+# 添加新消息
+data['messages'].append({
+    "id": new_id,
+    "text": message,
+    "date": date,
+    "author": author
+})
+
+# 按 ID 排序
+data['messages'].sort(key=lambda m: m['id'])
+
+# 保持最多 4 条，删除最旧的（ID 最小的）
+while len(data['messages']) > 4:
+    data['messages'].pop(0)
+
+with open(filepath, 'w', encoding='utf-8') as f:
+    json.dump(data, f, ensure_ascii=False, indent=4)
+    f.write('\n')
+PYEOF
+
+# Git 提交并推送
+cd "$PROJECT_DIR"
+git add messages.json
+git commit -m "tsts: $MESSAGE"
+git pull --rebase
+git push
